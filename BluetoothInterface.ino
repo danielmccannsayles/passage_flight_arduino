@@ -37,7 +37,6 @@ void loop(void)
         switch (bluetooth.read()) {
           case 'a': // "start"
             doUpdateStatus = true;
-            digitalWrite(13, HIGH);
             
             bluetooth.read(); // Ignore 'r'
             while (bluetooth.available() == 0);
@@ -46,7 +45,6 @@ void loop(void)
             
           case 'o': // "stop"
             doUpdateStatus = false;
-            digitalWrite(13, LOW);
             
             bluetooth.read(); // Ignore 'p'
         }
@@ -110,6 +108,4 @@ void setup(void)
   gravityTds.setAdcRange(1024);  //1024 for 10bit ADC;4096 for 12bit ADC
   gravityTds.begin();  //initialization
 
-  pinMode(13, OUTPUT);
-  digitalWrite(13, LOW);
 }
