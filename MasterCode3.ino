@@ -2,10 +2,10 @@
 int motor1pin1 = 7; int motor1pin2 = 8;
 
 // UV Pins
-int UVpin=5;
+int UVpin1=5; int UVpin2=6;
 
 // Flowmeter pins
-int flowPin = 2;    //This is the input pin on the Arduino
+int flowPin = 0;    //This is the input pin on the Arduino
 double flowRate;    //This is the value we intend to calculate.
 volatile int count;
 
@@ -23,8 +23,8 @@ int WaterHeight2;
 
 
 //PI Constants
-double kp = 2;
-double ki = 5;
+double kp = 3;
+double ki = 9;
 
 //PI Constant
 double setPoint = 3; //set point to 3L/min
@@ -33,6 +33,21 @@ unsigned long currentTime, previousTime;
 double elapsedTime, error, cumError, lastError, input, output;
 
 float temperature = 25,tdsValue = 0;
+
+//Bluetooth
+#include <Wire.h>
+
+#define DEBUG 1
+
+// Library for virtual serial ports over normal pins
+#include <SoftwareSerial.h>
+
+SoftwareSerial bluetooth(13, 12); //(rx, tx)
+
+bool doUpdateStatus = false;
+
+
+int x = 0;
 
 //Loop Variables
 int Res1 = 0; int Res2 = 0; //Reservoir Logic Gates
@@ -50,7 +65,10 @@ void setup() {
   // Motor Code
   pinMode(motor1pin1, OUTPUT);
   pinMode(motor1pin2, OUTPUT);
-  pinMode(9, OUTPUT); 
+  pinMode(9, OUTPUT);
+
+  //UV Light
+  pinMode(4,OUTPUT);
 
   // TDS Sensor
   gravityTds.setPin(TdsSensorPin);
@@ -78,7 +96,7 @@ if (Res1==0){
 }
 
 else if (Res1==1){
-  if (Res2=0){
+  if (Res2==0){
     pump_on(Speed);
     //Pump PI Control
     if (flowR>1){
@@ -86,18 +104,19 @@ else if (Res1==1){
     }
     Serial.print("System Active");
     UV_off;
-    delay(1000);
+    delay(10000);
   }
-  else if (Res2=1){
+  else if (Res2==1){
     pump_off();
+    Serial.print("Stop Pouring Water!");
     delay(1000);
-    for (int i = 0; i <= 5; i++) {
+    for (int i = 0; i <= 5; i++) { //Pump off and wait 5 seconds for system to settle
       sensorRead();
       delay(1000);
     }
     UV_on();
-    Serial.print("UV Filtering");
-    for (int i=0; i<=200; i++){
+    Serial.print("UV Filtering, Please Wait");
+    for (int i=0; i<=200; i++){ //UV Filter on for 200 seconds
       delay(1000);
     }
     UV_off();
@@ -124,24 +143,28 @@ void Time()
 
 void pump_on(int speed){   
   //Controlling speed (150 < Speed < 255)
-  analogWrite(9, speed); //ENA pin
+  analogWrite(9, speed); //ENB pin
   digitalWrite(motor1pin1, HIGH);
   digitalWrite(motor1pin2, LOW);
 }
 
 void pump_off(){
-  analogWrite(9, 0); //ENA pin
+  analogWrite(9, 0); //ENB pin
   digitalWrite(motor1pin1, LOW);
   digitalWrite(motor1pin2, LOW);
 }
 
 void UV_on(){
   // UV (High/Low)
-  digitalWrite(UVpin, HIGH);
+  analogWrite(4, 170); //ENA pin
+  digitalWrite(UVpin1, HIGH);
+  digitalWrite(UVpin2, LOW);
 }
 
 void UV_off(){ 
-  digitalWrite(UVpin, LOW);
+  analogWrite(4, 0); //ENA pin
+  digitalWrite(UVpin1, LOW);
+  digitalWrite(UVpin2, LOW);
 }
 
 int Flowmeter(){
@@ -158,8 +181,6 @@ int Flowmeter(){
   int flowRate = (count * 2.25); //Take counted pulses in the last second and multiply by 2.25mL
   flowRate = flowRate * 60;   //Convert seconds to minutes, giving you mL / Minute
   flowRate = flowRate / 1000;   //Convert mL to Liters, giving you Liters / Minute
-
-  Serial.println(flowRate);  //Print the variable flowRate to Serial
   return flowRate;
 }
 
@@ -169,15 +190,13 @@ int TDS(){
   gravityTds.update();  //sample and calculate
   int tdsValue = gravityTds.getTdsValue();  // then get the value
   tdsValue=tdsValue*10/9;
-  Serial.print(tdsValue,0);
-  Serial.println("ppm");
   return tdsValue;
 }
 
 int WaterLevel(int pin) {
   int WaterHeight = analogRead(pin); // take a reading from the optical sensor pin
   
-  Serial.print("Water Height Reading 1 = ");   // Print string to console
+  Serial.print("Water Height Reading = ");   // Print string to console
   Serial.println(WaterHeight);   // the analog reading of the optical sensor
   
   if (WaterHeight < 100) {
@@ -196,15 +215,23 @@ int WaterLevel(int pin) {
 
 void sensorRead(){
   Serial.println("");
+  Serial.println("");
 //Sensor Readings
   Res1=WaterLevel(HeightPin1);
   Res2=WaterLevel(HeightPin2);
   flowR=Flowmeter();
   tdsVal=TDS();
+  
+  Serial.println("");
 
 //Serial Print Readings
-  Serial.println(flowR); //Plot Var
-  Serial.println(tdsVal); //Plot Var
+  Serial.print(flowR); //Plot Var
+  Serial.print("L/min");
+  Serial.println("");
+  
+  Serial.print(tdsVal); //Plot Var 
+  Serial.print("ppm");
+  Serial.println("");
 }
 
 int computePI(double inp){   
